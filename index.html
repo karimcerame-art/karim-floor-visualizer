@@ -28,14 +28,38 @@
     background: #eee;
   }
 
-  /* ✅ iOS-SAFE HIDING (DO NOT USE display:none) */
-  input[type=file], select {
+  #laminatePanel {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+  }
+
+  #laminateBox {
+    background: #fff;
+    padding: 16px;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 360px;
+  }
+
+  .laminateBtn {
+    width: 100%;
+    padding: 14px;
+    margin-top: 10px;
+    border-radius: 12px;
+    border: none;
+    background: #000;
+    color: #fff;
+    font-size: 16px;
+  }
+
+  input[type=file] {
     position: absolute;
-    left: -10000px;
-    top: 0;
-    opacity: 0;
-    height: 1px;
-    width: 1px;
+    left: -9999px;
   }
 </style>
 </head>
@@ -47,12 +71,24 @@
 </div>
 
 <input id="upload" type="file" accept="image/*" />
-<select id="laminate">
-  <option value="">Choose Laminate</option>
-  <option value="laminates/10CI56580.png">Oak Dark</option>
-  <option value="laminates/10CI52799.png">Oak Light</option>
-  <option value="laminates/10CI56582.png">Walnut</option>
-</select>
+
+<!-- LAMINATE PICKER -->
+<div id="laminatePanel">
+  <div id="laminateBox">
+    <button class="laminateBtn" onclick="selectLaminate('laminates/10CI56580.png')">
+      Oak Dark
+    </button>
+    <button class="laminateBtn" onclick="selectLaminate('laminates/10CI52799.png')">
+      Oak Light
+    </button>
+    <button class="laminateBtn" onclick="selectLaminate('laminates/10CI56582.png')">
+      Walnut
+    </button>
+    <button class="laminateBtn" onclick="closeLaminatePanel()" style="background:#777">
+      Cancel
+    </button>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById("canvas");
@@ -62,7 +98,7 @@ let roomImage = null;
 let laminateImage = null;
 let floorMask = null;
 
-// ---------- LOAD ROOM IMAGE ----------
+// ---------- UPLOAD ROOM ----------
 document.getElementById("upload").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -103,25 +139,25 @@ function generateFloorMask() {
 }
 
 // ---------- APPLY LAMINATE ----------
-document.getElementById("laminate").addEventListener("change", e => {
-  if (!roomImage || !floorMask || !e.target.value) return;
+function selectLaminate(src) {
+  if (!roomImage || !floorMask) return;
 
   laminateImage = new Image();
-  laminateImage.onload = applyLaminate;
-  laminateImage.src = e.target.value;
-});
+  laminateImage.onload = () => {
+    ctx.drawImage(roomImage, 0, 0);
 
-function applyLaminate() {
-  ctx.drawImage(roomImage, 0, 0);
+    const pattern = ctx.createPattern(laminateImage, "repeat");
 
-  const pattern = ctx.createPattern(laminateImage, "repeat");
+    ctx.save();
+    ctx.putImageData(floorMask, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
 
-  ctx.save();
-  ctx.putImageData(floorMask, 0, 0);
-  ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = pattern;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
+    closeLaminatePanel();
+  };
+  laminateImage.src = src;
 }
 
 // ---------- SAVE ----------
@@ -132,16 +168,20 @@ function saveImage() {
   link.click();
 }
 
-// ---------- SWIFTUI BRIDGE ----------
+// ---------- PANEL CONTROL (SWIFTUI SAFE) ----------
 function openUploader() {
   document.getElementById("upload").click();
 }
 
 function showLaminatePicker() {
-  document.getElementById("laminate").focus();
-  document.getElementById("laminate").click();
+  document.getElementById("laminatePanel").style.display = "flex";
+}
+
+function closeLaminatePanel() {
+  document.getElementById("laminatePanel").style.display = "none";
 }
 </script>
 
 </body>
 </html>
+
