@@ -10,12 +10,12 @@ body {
   font-family: -apple-system;
 }
 
-/* MAIN CANVAS */
+/* CANVAS — NEVER TOUCHABLE */
 #canvas {
   width: 100%;
   display: block;
   background: #ddd;
-  pointer-events: auto; /* default */
+  pointer-events: none; /* 🔥 ALWAYS DISABLED */
 }
 
 /* LAMINATE PICKER */
@@ -27,7 +27,7 @@ body {
   background: #eee;
   padding: 12px;
   border-top: 1px solid #ccc;
-  z-index: 9999;
+  z-index: 999999; /* 🔥 ABOVE EVERYTHING */
 }
 
 /* LAMINATE BUTTON */
@@ -48,7 +48,7 @@ body {
   object-fit: cover;
 }
 
-/* NUMBER ON TOP */
+/* NUMBER OVERLAY */
 .laminate span {
   position: absolute;
   top: 8px;
@@ -100,10 +100,7 @@ const canvas = document.getElementById('canvas')
 const ctx = canvas.getContext('2d')
 let baseImage = new Image()
 
-/* =====================
-   CALLED FROM SWIFT
-   ===================== */
-
+/* CALLED FROM SWIFT */
 function loadImage(base64) {
   baseImage.onload = () => {
     canvas.width = baseImage.width
@@ -113,28 +110,21 @@ function loadImage(base64) {
   baseImage.src = 'data:image/jpeg;base64,' + base64
 }
 
+/* CALLED FROM SWIFT */
 function openLaminatePicker() {
   document.getElementById('laminates').style.display = 'block'
-  canvas.style.pointerEvents = 'none'   // 🔥 FIX
 }
 
 function closePicker() {
   document.getElementById('laminates').style.display = 'none'
-  canvas.style.pointerEvents = 'auto'   // 🔥 RESTORE
 }
 
-/* =====================
-   APPLY LAMINATE
-   ===================== */
-
+/* APPLY LAMINATE */
 function applyLaminate(src) {
   const tex = new Image()
   tex.onload = () => {
-
-    // redraw base image
     ctx.drawImage(baseImage, 0, 0)
 
-    // apply laminate to floor area
     ctx.globalAlpha = 0.95
     ctx.drawImage(
       tex,
@@ -151,10 +141,7 @@ function applyLaminate(src) {
   tex.src = src
 }
 
-/* =====================
-   SEND RESULT TO SWIFT
-   ===================== */
-
+/* SEND RESULT BACK TO SWIFT */
 function sendResult() {
   const b64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1]
   window.webkit.messageHandlers.result.postMessage(b64)
