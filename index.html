@@ -3,18 +3,54 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { margin:0; background:#f5f5f5; font-family:-apple-system }
-canvas { width:100%; height:auto; display:block }
-button {
-  width:90%;
-  padding:14px;
-  margin:10px auto;
+body {
+  margin:0;
+  background:#f5f5f5;
+  font-family:-apple-system;
+}
+
+#canvas {
+  width:100%;
   display:block;
+  background:#ddd;
+}
+
+/* Laminate picker */
+#laminates {
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  background:#eee;
+  padding:12px;
+  border-top:1px solid #ccc;
+}
+
+.laminate {
+  display:flex;
+  align-items:center;
   background:black;
   color:white;
-  border:none;
   border-radius:10px;
-  font-size:16px;
+  padding:10px;
+  margin-bottom:10px;
+  cursor:pointer;
+}
+
+.laminate img {
+  width:60px;
+  height:40px;
+  object-fit:cover;
+  border-radius:6px;
+  margin-right:12px;
+}
+
+.cancel {
+  background:#555;
+  text-align:center;
+  padding:12px;
+  border-radius:10px;
+  color:white;
 }
 </style>
 </head>
@@ -24,26 +60,42 @@ button {
 <canvas id="canvas"></canvas>
 
 <div id="laminates" style="display:none">
-  <button onclick="applyLaminate('laminates/10CI56580.png')">10CI56580</button>
-  <button onclick="applyLaminate('laminates/10CI52799.png')">10CI52799</button>
-  <button onclick="applyLaminate('laminates/10CI56582.png')">10CI56582</button>
-  <button onclick="closePicker()">Cancel</button>
+
+  <div class="laminate" onclick="applyLaminate('laminates/10CI56580.png')">
+    <img src="laminates/10CI56580.png">
+    <span>10CI56580</span>
+  </div>
+
+  <div class="laminate" onclick="applyLaminate('laminates/10CI52799.png')">
+    <img src="laminates/10CI52799.png">
+    <span>10CI52799</span>
+  </div>
+
+  <div class="laminate" onclick="applyLaminate('laminates/10CI56582.png')">
+    <img src="laminates/10CI56582.png">
+    <span>10CI56582</span>
+  </div>
+
+  <div class="cancel" onclick="closePicker()">Cancel</div>
 </div>
 
 <script>
-let baseImg = new Image()
-let canvas = document.getElementById('canvas')
-let ctx = canvas.getContext('2d')
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
 
-function loadImage(b64) {
-  baseImg.onload = () => {
-    canvas.width = baseImg.width
-    canvas.height = baseImg.height
-    ctx.drawImage(baseImg,0,0)
+let baseImage = new Image()
+
+/* CALLED FROM SWIFT */
+function loadImage(base64) {
+  baseImage.onload = () => {
+    canvas.width = baseImage.width
+    canvas.height = baseImage.height
+    ctx.drawImage(baseImage, 0, 0)
   }
-  baseImg.src = 'data:image/jpeg;base64,' + b64
+  baseImage.src = 'data:image/jpeg;base64,' + base64
 }
 
+/* CALLED FROM SWIFT */
 function openLaminatePicker() {
   document.getElementById('laminates').style.display = 'block'
 }
@@ -53,17 +105,30 @@ function closePicker() {
 }
 
 function applyLaminate(src) {
-  let tex = new Image()
+  const tex = new Image()
   tex.onload = () => {
-    ctx.globalAlpha = 0.85
-    ctx.drawImage(tex,0,canvas.height/2,canvas.width,canvas.height/2)
+    // redraw base
+    ctx.drawImage(baseImage, 0, 0)
+
+    // simple floor overlay (bottom half)
+    ctx.globalAlpha = 0.9
+    ctx.drawImage(
+      tex,
+      0,
+      canvas.height * 0.55,
+      canvas.width,
+      canvas.height * 0.45
+    )
+    ctx.globalAlpha = 1.0
+
     sendResult()
+    closePicker()
   }
   tex.src = src
 }
 
 function sendResult() {
-  let b64 = canvas.toDataURL('image/jpeg').split(',')[1]
+  const b64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1]
   window.webkit.messageHandlers.result.postMessage(b64)
 }
 </script>
