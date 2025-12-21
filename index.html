@@ -1,130 +1,83 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Floor Visualizer</title>
 
 <style>
-body {
+  body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     background: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     text-align: center;
-}
-
-header {
-    background: #000;
-    color: #fff;
-    padding: 14px;
-    font-weight: 600;
-}
-
-#preview {
-    width: 92%;
-    height: 420px;
-    margin: 20px auto;
-    border-radius: 16px;
-    background: #eaeaea;
-    position: relative;
-    overflow: hidden;
-    border: 1px solid #000;
-}
-
-#baseImage, #laminateImage {
-    position: absolute;
+  }
+  canvas {
     width: 100%;
-    height: 100%;
-    object-fit: contain;
-}
-
-button {
-    width: 90%;
-    padding: 14px;
-    margin: 8px auto;
-    font-size: 16px;
-    border-radius: 12px;
-    border: none;
-    background: #000;
-    color: #fff;
-}
-
-#laminateMenu {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #fff;
-    padding: 20px;
-    border-top-left-radius: 20px;
-    border-top-right-radius: 20px;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
-}
-
-.laminate {
-    background: #000;
-    color: #fff;
-    padding: 12px;
-    border-radius: 10px;
-    margin: 8px 0;
-}
-.cancel {
-    background: #777;
-}
+    max-width: 500px;
+    margin-top: 10px;
+  }
 </style>
 </head>
 
 <body>
 
-<header>Floor Visualizer</header>
-
-<div id="preview">
-    <img id="baseImage" />
-    <img id="laminateImage" />
-</div>
-
-<button onclick="pickImage()">Upload Photo</button>
-<button onclick="openLaminateMenu()">Choose Laminate</button>
-
-<input type="file" id="fileInput" accept="image/*" hidden />
-
-<div id="laminateMenu">
-    <div class="laminate" onclick="applyLaminate('10CI56580.png')">10CI56580</div>
-    <div class="laminate" onclick="applyLaminate('10CI52799.png')">10CI52799</div>
-    <div class="laminate" onclick="applyLaminate('10CI56582.png')">10CI56582</div>
-    <div class="laminate cancel" onclick="closeLaminateMenu()">Cancel</div>
-</div>
+<canvas id="canvas"></canvas>
 
 <script>
-const fileInput = document.getElementById("fileInput");
-const baseImage = document.getElementById("baseImage");
-const laminateImage = document.getElementById("laminateImage");
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
 
-function pickImage() {
-    fileInput.click();
+let baseImage = new Image();
+let laminateImage = new Image();
+let floorMask = null;
+
+/* =========================
+   CALLED FROM iOS (Swift)
+   ========================= */
+
+function loadImage(base64) {
+  baseImage.onload = () => {
+    canvas.width = baseImage.width;
+    canvas.height = baseImage.height;
+    ctx.drawImage(baseImage, 0, 0);
+  };
+  baseImage.src = "data:image/jpeg;base64," + base64;
 }
 
-fileInput.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    baseImage.src = URL.createObjectURL(file);
-};
-
-function openLaminateMenu() {
-    document.getElementById("laminateMenu").style.display = "block";
+function applyLaminate(code) {
+  laminateImage.onload = () => {
+    drawLaminate();
+  };
+  laminateImage.src =
+    "https://karimcerame-art.github.io/karim-floor-visualizer/laminates/" +
+    code + ".png";
 }
 
-function closeLaminateMenu() {
-    document.getElementById("laminateMenu").style.display = "none";
-}
+/* =========================
+   SIMPLE FLOOR APPLY LOGIC
+   ========================= */
 
-function applyLaminate(fileName) {
-    laminateImage.src = "laminates/" + fileName;
-    laminateImage.style.opacity = "0.85";
-    closeLaminateMenu();
+function drawLaminate() {
+  if (!baseImage.complete || !laminateImage.complete) return;
+
+  // redraw base
+  ctx.drawImage(baseImage, 0, 0);
+
+  // repeat laminate
+  let pattern = ctx.createPattern(laminateImage, "repeat");
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = pattern;
+
+  // bottom half = floor (simple but works)
+  ctx.fillRect(
+    0,
+    canvas.height * 0.55,
+    canvas.width,
+    canvas.height * 0.45
+  );
+
+  ctx.globalAlpha = 1.0;
 }
 </script>
 
