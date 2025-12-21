@@ -28,8 +28,14 @@
     background: #eee;
   }
 
-  input, select {
-    display: none;
+  /* ✅ iOS-SAFE HIDING (DO NOT USE display:none) */
+  input[type=file], select {
+    position: absolute;
+    left: -10000px;
+    top: 0;
+    opacity: 0;
+    height: 1px;
+    width: 1px;
   }
 </style>
 </head>
@@ -67,13 +73,12 @@ document.getElementById("upload").addEventListener("change", e => {
     canvas.height = img.height;
     ctx.drawImage(img, 0, 0);
     roomImage = img;
-
-    generateFloorMask(); // SIMPLE FLOOR DETECTION
+    generateFloorMask();
   };
   img.src = URL.createObjectURL(file);
 });
 
-// ---------- FLOOR MASK (BOTTOM HALF + COLOR FILTER) ----------
+// ---------- SIMPLE FLOOR MASK ----------
 function generateFloorMask() {
   const w = canvas.width;
   const h = canvas.height;
@@ -85,7 +90,6 @@ function generateFloorMask() {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
 
-      // FLOOR = bottom half + brownish colors
       const r = d[i];
       const g = d[i+1];
       const b = d[i+2];
@@ -93,23 +97,17 @@ function generateFloorMask() {
       const isBottom = y > h * 0.45;
       const isFloorColor = r > g && g > b;
 
-      if (isBottom && isFloorColor) {
-        d[i+3] = 255; // keep
-      } else {
-        d[i+3] = 0;   // remove
-      }
+      d[i+3] = (isBottom && isFloorColor) ? 255 : 0;
     }
   }
 }
 
 // ---------- APPLY LAMINATE ----------
 document.getElementById("laminate").addEventListener("change", e => {
-  if (!roomImage || !floorMask) return;
+  if (!roomImage || !floorMask || !e.target.value) return;
 
   laminateImage = new Image();
-  laminateImage.onload = () => {
-    applyLaminate();
-  };
+  laminateImage.onload = applyLaminate;
   laminateImage.src = e.target.value;
 });
 
@@ -117,6 +115,7 @@ function applyLaminate() {
   ctx.drawImage(roomImage, 0, 0);
 
   const pattern = ctx.createPattern(laminateImage, "repeat");
+
   ctx.save();
   ctx.putImageData(floorMask, 0, 0);
   ctx.globalCompositeOperation = "source-in";
@@ -139,6 +138,7 @@ function openUploader() {
 }
 
 function showLaminatePicker() {
+  document.getElementById("laminate").focus();
   document.getElementById("laminate").click();
 }
 </script>
