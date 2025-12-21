@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,114 +9,124 @@
 
 <style>
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f5f5f5;
-  text-align: center;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f5f5;
+    text-align: center;
+}
+
+header {
+    background: #000;
+    color: #fff;
+    padding: 14px;
+    font-weight: 600;
 }
 
 #preview {
-  width: 90%;
-  max-width: 360px;
-  height: 360px;
-  margin: 20px auto;
-  border-radius: 16px;
-  background: #ddd;
-  overflow: hidden;
-  position: relative;
+    width: 92%;
+    height: 420px;
+    margin: 20px auto;
+    border-radius: 16px;
+    background: #eaeaea;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #000;
 }
 
-#preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+#baseImage, #laminateImage {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
-#laminatePanel {
-  position: fixed;
-  bottom: 90px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%;
-  max-width: 360px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 12px;
-  display: none;
-  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+button {
+    width: 90%;
+    padding: 14px;
+    margin: 8px auto;
+    font-size: 16px;
+    border-radius: 12px;
+    border: none;
+    background: #000;
+    color: #fff;
+}
+
+#laminateMenu {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    padding: 20px;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
 }
 
 .laminate {
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #000;
-  color: #fff;
-  border-radius: 10px;
-  cursor: pointer;
+    background: #000;
+    color: #fff;
+    padding: 12px;
+    border-radius: 10px;
+    margin: 8px 0;
+}
+.cancel {
+    background: #777;
 }
 </style>
 </head>
 
 <body>
 
+<header>Floor Visualizer</header>
+
 <div id="preview">
-  <img id="result" />
+    <img id="baseImage" />
+    <img id="laminateImage" />
 </div>
 
-<div id="laminatePanel">
-  <div class="laminate" onclick="applyLaminate('oak-dark.png')">Oak Dark</div>
-  <div class="laminate" onclick="applyLaminate('oak-light.png')">Oak Light</div>
-  <div class="laminate" onclick="applyLaminate('walnut.png')">Walnut</div>
-  <div class="laminate" onclick="hideLaminatePicker()">Cancel</div>
-</div>
+<button onclick="pickImage()">Upload Photo</button>
+<button onclick="openLaminateMenu()">Choose Laminate</button>
 
-<input id="fileInput" type="file" accept="image/*" hidden />
+<input type="file" id="fileInput" accept="image/*" hidden />
+
+<div id="laminateMenu">
+    <div class="laminate" onclick="applyLaminate('10CI56580.png')">10CI56580</div>
+    <div class="laminate" onclick="applyLaminate('10CI52799.png')">10CI52799</div>
+    <div class="laminate" onclick="applyLaminate('10CI56582.png')">10CI56582</div>
+    <div class="laminate cancel" onclick="closeLaminateMenu()">Cancel</div>
+</div>
 
 <script>
-let baseImage = null;
+const fileInput = document.getElementById("fileInput");
+const baseImage = document.getElementById("baseImage");
+const laminateImage = document.getElementById("laminateImage");
 
-function openUploader() {
-  document.getElementById('fileInput').click();
+function pickImage() {
+    fileInput.click();
 }
 
-document.getElementById('fileInput').onchange = e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    baseImage = reader.result;
-    document.getElementById('result').src = baseImage;
-  };
-  reader.readAsDataURL(file);
+fileInput.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    baseImage.src = URL.createObjectURL(file);
 };
 
-function showLaminatePicker() {
-  document.getElementById('laminatePanel').style.display = 'block';
+function openLaminateMenu() {
+    document.getElementById("laminateMenu").style.display = "block";
 }
 
-function hideLaminatePicker() {
-  document.getElementById('laminatePanel').style.display = 'none';
+function closeLaminateMenu() {
+    document.getElementById("laminateMenu").style.display = "none";
 }
 
-function applyLaminate(name) {
-  if (!baseImage) {
-    alert("Upload photo first");
-    return;
-  }
-
-  // ✅ CORRECT GITHUB PATH
-  const laminatePath = "laminates/" + name;
-
-  document.getElementById('result').src = laminatePath;
-  hideLaminatePicker();
-}
-
-function saveImage() {
-  alert("Saving via native app");
+function applyLaminate(fileName) {
+    laminateImage.src = "laminates/" + fileName;
+    laminateImage.style.opacity = "0.85";
+    closeLaminateMenu();
 }
 </script>
 
 </body>
 </html>
-
