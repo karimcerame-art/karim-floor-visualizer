@@ -2,175 +2,144 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Karim Floor Visualizer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Karim Floor Visualizer</title>
 
 <style>
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f5f5f5;
-  text-align: center;
-}
+  body {
+    margin: 0;
+    background: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    text-align: center;
+  }
 
-header {
-  background: #000;
-  color: #fff;
-  padding: 14px;
-  font-weight: bold;
-}
+  #container {
+    max-width: 420px;
+    margin: 20px auto;
+    background: #fff;
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  }
 
-#container {
-  max-width: 420px;
-  margin: auto;
-  padding: 15px;
-}
+  canvas {
+    width: 100%;
+    border-radius: 12px;
+    background: #eee;
+  }
 
-canvas {
-  width: 100%;
-  border-radius: 14px;
-  background: #ddd;
-}
-
-button {
-  width: 100%;
-  padding: 14px;
-  margin-top: 10px;
-  border-radius: 12px;
-  border: none;
-  font-size: 16px;
-}
-
-.black {
-  background: #000;
-  color: #fff;
-}
-
-.gray {
-  background: #aaa;
-  color: #fff;
-}
-
-#laminates {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 10px;
-}
-
-#laminates img {
-  width: 100%;
-  border-radius: 8px;
-  border: 2px solid transparent;
-}
-
-#laminates img.selected {
-  border-color: #000;
-}
+  input, select {
+    display: none;
+  }
 </style>
 </head>
 
 <body>
 
-<header>Floor Visualizer</header>
-
 <div id="container">
-
-<input type="file" id="upload" accept="image/*" hidden>
-<button class="black" onclick="upload.click()">Upload Photo</button>
-
-<canvas id="canvas"></canvas>
-
-<button id="chooseBtn" class="gray" disabled>Choose Laminate</button>
-
-<div id="laminates"></div>
-
-<button class="black" onclick="saveImage()">Save Result</button>
-
+  <canvas id="canvas"></canvas>
 </div>
 
+<input id="upload" type="file" accept="image/*" />
+<select id="laminate">
+  <option value="">Choose Laminate</option>
+  <option value="laminates/10CI56580.png">Oak Dark</option>
+  <option value="laminates/10CI52799.png">Oak Light</option>
+  <option value="laminates/10CI56582.png">Walnut</option>
+</select>
+
 <script>
-const upload = document.getElementById("upload");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-const chooseBtn = document.getElementById("chooseBtn");
-const laminatesDiv = document.getElementById("laminates");
 
-let baseImage = new Image();
+let roomImage = null;
+let laminateImage = null;
 let floorMask = null;
 
-upload.onchange = e => {
+// ---------- LOAD ROOM IMAGE ----------
+document.getElementById("upload").addEventListener("change", e => {
   const file = e.target.files[0];
-  const reader = new FileReader();
-  reader.onload = () => {
-    baseImage.onload = () => {
-      canvas.width = baseImage.width;
-      canvas.height = baseImage.height;
-      ctx.drawImage(baseImage, 0, 0);
-      detectFloor();
-    };
-    baseImage.src = reader.result;
+  if (!file) return;
+
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+    roomImage = img;
+
+    generateFloorMask(); // SIMPLE FLOOR DETECTION
   };
-  reader.readAsDataURL(file);
-};
+  img.src = URL.createObjectURL(file);
+});
 
-function detectFloor() {
-  // SIMPLE FLOOR HEURISTIC (OPEN SOURCE STYLE)
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  floorMask = ctx.createImageData(imgData);
+// ---------- FLOOR MASK (BOTTOM HALF + COLOR FILTER) ----------
+function generateFloorMask() {
+  const w = canvas.width;
+  const h = canvas.height;
 
-  for (let i = 0; i < imgData.data.length; i += 4) {
-    const y = Math.floor(i / 4 / canvas.width);
-    const ratio = y / canvas.height;
+  floorMask = ctx.getImageData(0, 0, w, h);
+  const d = floorMask.data;
 
-    // bottom 45% = floor
-    if (ratio > 0.55) {
-      floorMask.data[i + 3] = 255;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+
+      // FLOOR = bottom half + brownish colors
+      const r = d[i];
+      const g = d[i+1];
+      const b = d[i+2];
+
+      const isBottom = y > h * 0.45;
+      const isFloorColor = r > g && g > b;
+
+      if (isBottom && isFloorColor) {
+        d[i+3] = 255; // keep
+      } else {
+        d[i+3] = 0;   // remove
+      }
     }
   }
-
-  chooseBtn.disabled = false;
-  chooseBtn.className = "black";
-  loadLaminates();
 }
 
-function loadLaminates() {
-  laminatesDiv.innerHTML = "";
-  const files = [
-    "laminates/10CI56580.png",
-    "laminates/10CI52799.png",
-    "laminates/10CI56582.png"
-  ];
+// ---------- APPLY LAMINATE ----------
+document.getElementById("laminate").addEventListener("change", e => {
+  if (!roomImage || !floorMask) return;
 
-  files.forEach(src => {
-    const img = new Image();
-    img.src = src;
-    img.onclick = () => applyLaminate(img);
-    laminatesDiv.appendChild(img);
-  });
-}
+  laminateImage = new Image();
+  laminateImage.onload = () => {
+    applyLaminate();
+  };
+  laminateImage.src = e.target.value;
+});
 
-function applyLaminate(texture) {
-  ctx.drawImage(baseImage, 0, 0);
+function applyLaminate() {
+  ctx.drawImage(roomImage, 0, 0);
 
-  const pattern = ctx.createPattern(texture, "repeat");
+  const pattern = ctx.createPattern(laminateImage, "repeat");
+  ctx.save();
+  ctx.putImageData(floorMask, 0, 0);
+  ctx.globalCompositeOperation = "source-in";
   ctx.fillStyle = pattern;
-
-  const maskData = floorMask.data;
-  for (let i = 0; i < maskData.length; i += 4) {
-    if (maskData[i + 3] > 0) {
-      const x = (i / 4) % canvas.width;
-      const y = Math.floor(i / 4 / canvas.width);
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
 }
 
+// ---------- SAVE ----------
 function saveImage() {
   const link = document.createElement("a");
-  link.download = "karim-floor-result.png";
+  link.download = "karim-floor.png";
   link.href = canvas.toDataURL("image/png");
   link.click();
+}
+
+// ---------- SWIFTUI BRIDGE ----------
+function openUploader() {
+  document.getElementById("upload").click();
+}
+
+function showLaminatePicker() {
+  document.getElementById("laminate").click();
 }
 </script>
 
