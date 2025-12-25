@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Floor Visualizer</title>
+<title>Karim Floors – Visualizer</title>
 
 <style>
 body {
@@ -21,7 +21,7 @@ body {
 
 /* HEADER */
 .header {
-    background: #111;
+    background: #000;
     color: #fff;
     padding: 14px;
     font-size: 18px;
@@ -33,7 +33,7 @@ body {
 .main-image {
     position: relative;
     width: 100%;
-    height: 320px;
+    height: 340px;
     background: #ddd;
 }
 
@@ -50,6 +50,11 @@ body {
 /* CONTROLS */
 .controls {
     padding: 12px;
+}
+
+input[type="file"] {
+    width: 100%;
+    margin-bottom: 12px;
 }
 
 /* THUMB + LAMINATES */
@@ -112,12 +117,13 @@ button {
     <div class="header">Floor Visualizer</div>
 
     <div class="main-image">
-        <img id="roomImage" src="" />
+        <img id="roomImage" />
         <canvas id="canvas"></canvas>
     </div>
 
     <div class="controls">
-        <input type="file" id="roomInput" accept="image/*"><br><br>
+
+        <input type="file" id="roomInput" accept="image/*">
 
         <div class="bottom-row">
             <div class="thumb">
@@ -125,9 +131,10 @@ button {
             </div>
 
             <div class="laminates" id="laminates">
-                <img src="laminates/wood1.jpg">
-                <img src="laminates/wood2.jpg">
-                <img src="laminates/wood3.jpg">
+                <!-- 🔥 YOUR REAL LAMINATES -->
+                <img src="laminates/10CL52799.jpg" data-code="10CL52799">
+                <img src="laminates/10CL56580.jpg" data-code="10CL56580">
+                <img src="laminates/10CL56582.jpg" data-code="10CL56582">
             </div>
         </div>
 
@@ -151,6 +158,7 @@ roomInput.onchange = e => {
     const url = URL.createObjectURL(file);
     roomImage.src = url;
     roomThumb.src = url;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
 
 document.querySelectorAll(".laminates img").forEach(img => {
@@ -163,7 +171,7 @@ document.querySelectorAll(".laminates img").forEach(img => {
 
 function applyFloor() {
     if (!selectedLaminate || !roomImage.src) {
-        alert("Upload room and select laminate");
+        alert("Upload room photo and select laminate");
         return;
     }
 
@@ -177,9 +185,14 @@ function applyFloor() {
         const pattern = ctx.createPattern(patternImg, "repeat");
         ctx.fillStyle = pattern;
 
-        // SIMPLE FLOOR ZONE (BOTTOM HALF)
-        ctx.globalAlpha = 0.85;
-        ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
+        // FLOOR AREA (BOTTOM PART)
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(
+            0,
+            canvas.height * 0.55,
+            canvas.width,
+            canvas.height * 0.45
+        );
         ctx.globalAlpha = 1;
     };
 }
@@ -187,4 +200,5 @@ function applyFloor() {
 
 </body>
 </html>
+
 
