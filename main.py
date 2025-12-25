@@ -1,6 +1,5 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import base64
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import Response
 import cv2
 import numpy as np
 import torch
@@ -11,7 +10,7 @@ import io
 app = FastAPI()
 
 # ===============================
-# LOAD SEGFORMER (CPU ONLY)
+# LOAD SEGFORMER (BACKEND ONLY)
 # ===============================
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 
@@ -19,7 +18,7 @@ processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
 model = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
 model.eval()
 
-FLOOR_LABEL = 3  # ADE20K floor
+FLOOR_LABEL = 3  # ADE20K floor label
 
 # ===============================
 # HELPERS
@@ -41,35 +40,21 @@ def tile_texture(texture, target_shape):
     return tiled[:h, :w]
 
 # ===============================
-# REQUEST MODEL
+# CORE LOGIC
 # ===============================
-class ApplyRequest(BaseModel):
-    room: str      # base64 image
-    laminate: str  # base64 image
+def apply_floor_backend(room_img, floor_img):
+    room = Image.open(io.BytesIO(room_img)).convert("RGB")
+    floor = Image.open(io.BytesIO(floor_img)).convert("RGB")
 
-# ===============================
-# API ENDPOINT
-# ===============================
-@app.post("/apply-floor")
-def apply_floor(data: ApplyRequest):
-
-    # Decode images
-    room_bytes = base64.b64decode(data.room)
-    floor_bytes = base64.b64decode(data.laminate)
-
-    room = Image.open(io.BytesIO(room_bytes)).convert("RGB")
-    floor = Image.open(io.BytesIO(floor_bytes)).convert("RGB")
-
-    # Segmentation
     inputs = processor(images=room, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**inputs)
 
     seg = torch.argmax(outputs.logits, dim=1)[0].cpu().numpy()
+
     mask = (seg == FLOOR_LABEL).astype(np.uint8) * 255
     mask = cv2.resize(mask, room.size, interpolation=cv2.INTER_NEAREST)
 
-    # Clean mask
     mask = keep_largest_component(mask)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     mask = feather_mask(mask, 25)
@@ -82,14 +67,21 @@ def apply_floor(data: ApplyRequest):
     alpha = mask.astype(np.float32) / 255.0
     alpha = np.stack([alpha] * 3, axis=-1)
 
-    blended = (room_np * (1 - alpha) + tiled_floor * alpha).astype(np.uint8)
+    result = (room_np * (1 - alpha) + tiled_floor * alpha).astype(np.uint8)
+    return result
 
-    # Encode result
-    result_img = Image.fromarray(blended)
-    buf = io.BytesIO()
-    result_img.save(buf, format="JPEG", quality=95)
-    result_b64 = base64.b64encode(buf.getvalue()).decode()
+# ===============================
+# API ENDPOINT
+# ===============================
+@app.post("/apply")
+async def apply_floor(
+    room: UploadFile = File(...),
+    laminate: UploadFile = File(...)
+):
+    room_bytes = await room.read()
+    laminate_bytes = await laminate.read()
 
-    return {
-        "image": f"data:image/jpeg;base64,{result_b64}"
-    }
+    result = apply_floor_backend(room_bytes, laminate_bytes)
+
+    _, encoded = cv2.imencode(".png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
+    return Response(content=encoded.tobytes(), media_type="image/png")
