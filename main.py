@@ -1,55 +1,95 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+from pydantic import BaseModel
+import base64
+import cv2
+import numpy as np
+import torch
+from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 from PIL import Image
 import io
 
 app = FastAPI()
 
-# Allow Hugging Face + browser calls
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ===============================
+# LOAD SEGFORMER (CPU ONLY)
+# ===============================
+MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 
-@app.get("/")
-def health():
-    return {"status": "ok"}
+processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
+model = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
+model.eval()
 
+FLOOR_LABEL = 3  # ADE20K floor
+
+# ===============================
+# HELPERS
+# ===============================
+def keep_largest_component(mask):
+    num_labels, labels = cv2.connectedComponents(mask)
+    if num_labels <= 1:
+        return mask
+    largest = max(range(1, num_labels), key=lambda i: np.sum(labels == i))
+    return np.where(labels == largest, 255, 0).astype(np.uint8)
+
+def feather_mask(mask, ksize=25):
+    return cv2.GaussianBlur(mask, (ksize, ksize), 0)
+
+def tile_texture(texture, target_shape):
+    th, tw = texture.shape[:2]
+    h, w = target_shape
+    tiled = np.tile(texture, (h // th + 1, w // tw + 1, 1))
+    return tiled[:h, :w]
+
+# ===============================
+# REQUEST MODEL
+# ===============================
+class ApplyRequest(BaseModel):
+    room: str      # base64 image
+    laminate: str  # base64 image
+
+# ===============================
+# API ENDPOINT
+# ===============================
 @app.post("/apply-floor")
-async def apply_floor(
-    room: UploadFile = File(...),
-    laminate: UploadFile = File(...)
-):
-    # Load images
-    room_img = Image.open(io.BytesIO(await room.read())).convert("RGB")
-    laminate_img = Image.open(io.BytesIO(await laminate.read())).convert("RGB")
+def apply_floor(data: ApplyRequest):
 
-    w, h = room_img.size
+    # Decode images
+    room_bytes = base64.b64decode(data.room)
+    floor_bytes = base64.b64decode(data.laminate)
 
-    # Resize laminate to tile size
-    tile = laminate_img.resize((200, 200))
+    room = Image.open(io.BytesIO(room_bytes)).convert("RGB")
+    floor = Image.open(io.BytesIO(floor_bytes)).convert("RGB")
 
-    # Create tiled laminate
-    pattern = Image.new("RGB", (w, h))
-    for x in range(0, w, tile.width):
-        for y in range(int(h * 0.55), h, tile.height):
-            pattern.paste(tile, (x, y))
+    # Segmentation
+    inputs = processor(images=room, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**inputs)
 
-    # Blend laminate onto bottom of room
-    result = room_img.copy()
-    mask = Image.new("L", (w, h), 0)
-    for y in range(int(h * 0.55), h):
-        for x in range(w):
-            mask.putpixel((x, y), 200)
+    seg = torch.argmax(outputs.logits, dim=1)[0].cpu().numpy()
+    mask = (seg == FLOOR_LABEL).astype(np.uint8) * 255
+    mask = cv2.resize(mask, room.size, interpolation=cv2.INTER_NEAREST)
 
-    result = Image.composite(pattern, result, mask)
+    # Clean mask
+    mask = keep_largest_component(mask)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    mask = feather_mask(mask, 25)
 
-    # Return image
+    room_np = np.array(room)
+    floor_np = np.array(floor)
+
+    tiled_floor = tile_texture(floor_np, room_np.shape[:2])
+
+    alpha = mask.astype(np.float32) / 255.0
+    alpha = np.stack([alpha] * 3, axis=-1)
+
+    blended = (room_np * (1 - alpha) + tiled_floor * alpha).astype(np.uint8)
+
+    # Encode result
+    result_img = Image.fromarray(blended)
     buf = io.BytesIO()
-    result.save(buf, format="JPEG")
-    buf.seek(0)
+    result_img.save(buf, format="JPEG", quality=95)
+    result_b64 = base64.b64encode(buf.getvalue()).decode()
 
-    return Response(content=buf.read(), media_type="image/jpeg")
+    return {
+        "image": f"data:image/jpeg;base64,{result_b64}"
+    }
