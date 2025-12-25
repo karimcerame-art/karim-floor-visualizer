@@ -10,7 +10,7 @@ import io
 app = FastAPI()
 
 # ===============================
-# LOAD SEGFORMER (BACKEND ONLY)
+# LOAD SEGFORMER
 # ===============================
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
 
@@ -18,7 +18,7 @@ processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
 model = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
 model.eval()
 
-FLOOR_LABEL = 3  # ADE20K floor label
+FLOOR_LABEL = 3
 
 # ===============================
 # HELPERS
@@ -40,9 +40,9 @@ def tile_texture(texture, target_shape):
     return tiled[:h, :w]
 
 # ===============================
-# CORE LOGIC
+# CORE PROCESS
 # ===============================
-def apply_floor_backend(room_img, floor_img):
+def apply_floor(room_img, floor_img):
     room = Image.open(io.BytesIO(room_img)).convert("RGB")
     floor = Image.open(io.BytesIO(floor_img)).convert("RGB")
 
@@ -61,7 +61,6 @@ def apply_floor_backend(room_img, floor_img):
 
     room_np = np.array(room)
     floor_np = np.array(floor)
-
     tiled_floor = tile_texture(floor_np, room_np.shape[:2])
 
     alpha = mask.astype(np.float32) / 255.0
@@ -71,17 +70,17 @@ def apply_floor_backend(room_img, floor_img):
     return result
 
 # ===============================
-# API ENDPOINT
+# API ENDPOINT (THIS WAS MISSING ❌)
 # ===============================
-@app.post("/apply")
-async def apply_floor(
+@app.post("/apply-floor")
+async def apply_floor_api(
     room: UploadFile = File(...),
     laminate: UploadFile = File(...)
 ):
     room_bytes = await room.read()
     laminate_bytes = await laminate.read()
 
-    result = apply_floor_backend(room_bytes, laminate_bytes)
+    result = apply_floor(room_bytes, laminate_bytes)
 
-    _, encoded = cv2.imencode(".png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
-    return Response(content=encoded.tobytes(), media_type="image/png")
+    _, buffer = cv2.imencode(".png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
+    return Response(content=buffer.tobytes(), media_type="image/png")
