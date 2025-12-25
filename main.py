@@ -10,10 +10,9 @@ import io
 app = FastAPI()
 
 # ===============================
-# LOAD SEGFORMER
+# LOAD MODEL
 # ===============================
 MODEL_NAME = "nvidia/segformer-b0-finetuned-ade-512-512"
-
 processor = SegformerImageProcessor.from_pretrained(MODEL_NAME)
 model = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
 model.eval()
@@ -40,47 +39,36 @@ def tile_texture(texture, target_shape):
     return tiled[:h, :w]
 
 # ===============================
-# CORE PROCESS
+# API ROUTE
 # ===============================
-def apply_floor(room_img, floor_img):
-    room = Image.open(io.BytesIO(room_img)).convert("RGB")
-    floor = Image.open(io.BytesIO(floor_img)).convert("RGB")
+@app.post("/apply-floor")
+async def apply_floor(
+    room: UploadFile = File(...),
+    laminate: UploadFile = File(...)
+):
+    room_img = Image.open(io.BytesIO(await room.read())).convert("RGB")
+    floor_img = Image.open(io.BytesIO(await laminate.read())).convert("RGB")
 
-    inputs = processor(images=room, return_tensors="pt")
+    inputs = processor(images=room_img, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**inputs)
 
     seg = torch.argmax(outputs.logits, dim=1)[0].cpu().numpy()
-
     mask = (seg == FLOOR_LABEL).astype(np.uint8) * 255
-    mask = cv2.resize(mask, room.size, interpolation=cv2.INTER_NEAREST)
+    mask = cv2.resize(mask, room_img.size, interpolation=cv2.INTER_NEAREST)
 
     mask = keep_largest_component(mask)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     mask = feather_mask(mask, 25)
 
-    room_np = np.array(room)
-    floor_np = np.array(floor)
+    room_np = np.array(room_img)
+    floor_np = np.array(floor_img)
     tiled_floor = tile_texture(floor_np, room_np.shape[:2])
 
     alpha = mask.astype(np.float32) / 255.0
     alpha = np.stack([alpha] * 3, axis=-1)
 
     result = (room_np * (1 - alpha) + tiled_floor * alpha).astype(np.uint8)
-    return result
-
-# ===============================
-# API ENDPOINT (THIS WAS MISSING ❌)
-# ===============================
-@app.post("/apply-floor")
-async def apply_floor_api(
-    room: UploadFile = File(...),
-    laminate: UploadFile = File(...)
-):
-    room_bytes = await room.read()
-    laminate_bytes = await laminate.read()
-
-    result = apply_floor(room_bytes, laminate_bytes)
 
     _, buffer = cv2.imencode(".png", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))
     return Response(content=buffer.tobytes(), media_type="image/png")
