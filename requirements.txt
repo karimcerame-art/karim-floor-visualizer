@@ -1,6 +1,6 @@
-gradio
-torch
-transformers
-opencv-python-headless
+fastapi
+uvicorn
+python-multipart
+pillow
 numpy
-Pillow
+opencv-python-headless
