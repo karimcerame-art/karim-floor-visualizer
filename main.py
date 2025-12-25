@@ -1,12 +1,12 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-import numpy as np
 import io
 
 app = FastAPI()
 
-# Allow Hugging Face to call Render
+# Allow Hugging Face + browser calls
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,23 +15,41 @@ app.add_middleware(
 )
 
 @app.get("/")
-def root():
-    return {"status": "Render backend running"}
+def health():
+    return {"status": "ok"}
 
-@app.post("/upload")
-async def upload_image(
+@app.post("/apply-floor")
+async def apply_floor(
     room: UploadFile = File(...),
     laminate: UploadFile = File(...)
 ):
-    room_bytes = await room.read()
-    laminate_bytes = await laminate.read()
+    # Load images
+    room_img = Image.open(io.BytesIO(await room.read())).convert("RGB")
+    laminate_img = Image.open(io.BytesIO(await laminate.read())).convert("RGB")
 
-    room_img = Image.open(io.BytesIO(room_bytes)).convert("RGB")
-    laminate_img = Image.open(io.BytesIO(laminate_bytes)).convert("RGB")
+    w, h = room_img.size
 
-    # TEMP: no AI yet, just confirmation
-    return {
-        "room_size": room_img.size,
-        "laminate_size": laminate_img.size,
-        "message": "Images received successfully"
-    }
+    # Resize laminate to tile size
+    tile = laminate_img.resize((200, 200))
+
+    # Create tiled laminate
+    pattern = Image.new("RGB", (w, h))
+    for x in range(0, w, tile.width):
+        for y in range(int(h * 0.55), h, tile.height):
+            pattern.paste(tile, (x, y))
+
+    # Blend laminate onto bottom of room
+    result = room_img.copy()
+    mask = Image.new("L", (w, h), 0)
+    for y in range(int(h * 0.55), h):
+        for x in range(w):
+            mask.putpixel((x, y), 200)
+
+    result = Image.composite(pattern, result, mask)
+
+    # Return image
+    buf = io.BytesIO()
+    result.save(buf, format="JPEG")
+    buf.seek(0)
+
+    return Response(content=buf.read(), media_type="image/jpeg")
